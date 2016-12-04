@@ -5,16 +5,18 @@
 __global__
 void negateImage(const uchar4* const inputImageRGBA,
                  uchar4* const outputImageRGBA,
-                 int numCols) {
+                 int numCols, int numRows) {
   // find the 1-d index in the 2-d image
   const int2 matrix = make_int2( blockIdx.x * blockDim.x + threadIdx.x,
                              blockIdx.y * blockDim.y + threadIdx.y);
   const int index = matrix.y * numCols + matrix.x;
 
-  // apply negate algorithm
-  uchar4 output = make_uchar4(255-inputImageRGBA[index].x, 255-inputImageRGBA[index].y, 255-inputImageRGBA[index].z, 255);
+  if (index < numCols * numRows){
+    // apply negate algorithm
+    uchar4 output = make_uchar4(255-inputImageRGBA[index].x, 255-inputImageRGBA[index].y, 255-inputImageRGBA[index].z, 255);
 
-  outputImageRGBA[index] = output;
+    outputImageRGBA[index] = output;
+  }
 }
 
 
@@ -33,7 +35,8 @@ void flipX(const uchar4* const inputImageRGBA,
   const int2 outputMatrix = make_int2(matrix.x, numRows - matrix.y - 1);
   const int outputIndex = outputMatrix.y * numCols + outputMatrix.x;
 
-  outputImageRGBA[outputIndex] = inputImageRGBA[index];
+  if (outputIndex < numCols * numRows)
+    outputImageRGBA[outputIndex] = inputImageRGBA[index];
 }
 
 
@@ -53,7 +56,8 @@ void flipY(const uchar4* const inputImageRGBA,
   const int2 outputMatrix = make_int2(numCols - matrix.x - 1, matrix.y);
   const int outputIndex = outputMatrix.y * numCols + outputMatrix.x;
 
-  outputImageRGBA[outputIndex] = inputImageRGBA[index];
+  if (outputIndex < numCols * numRows)
+    outputImageRGBA[outputIndex] = inputImageRGBA[index];
 }
 
 void transform(uchar4 * const d_inputImageRGBA, uchar4* const d_outputImageRGBA, const size_t numRows, const size_t numCols, std::string transformation)
@@ -68,7 +72,7 @@ void transform(uchar4 * const d_inputImageRGBA, uchar4* const d_outputImageRGBA,
 
   // apply the specified transformation
   if (transformation == "negate")
-    negateImage<<<gridSize, blockSize>>>(d_inputImageRGBA, d_outputImageRGBA, numCols);
+    negateImage<<<gridSize, blockSize>>>(d_inputImageRGBA, d_outputImageRGBA, numCols, numRows);
   else if (transformation == "flipX")
     flipX<<<gridSize, blockSize>>>(d_inputImageRGBA, d_outputImageRGBA, numCols, numRows);
   else if (transformation == "flipY")
