@@ -29,8 +29,9 @@ void flipX(const uchar4* const inputImageRGBA,
                              blockIdx.y * blockDim.y + threadIdx.y);
   const int index = matrix.y * numCols + matrix.x;
 
-  // apply flipX algorithm
-  const int outputIndex = (numRows * numCols - 1) - index;
+  // create an output matrix to find the correct x-value 
+  const int2 outputMatrix = make_int2(matrix.x, numRows - matrix.y - 1);
+  const int outputIndex = outputMatrix.y * numCols + outputMatrix.x;
 
   outputImageRGBA[outputIndex] = inputImageRGBA[index];
 }
