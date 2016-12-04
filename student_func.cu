@@ -110,10 +110,22 @@ void negateImage(const uchar4* const inputImageRGBA,
                              blockIdx.y * blockDim.y + threadIdx.y);
   const int index = matrix.y * numCols + matrix.x;
 
-
   uchar4 output = make_uchar4(255-inputImageRGBA[index].x, 255-inputImageRGBA[index].y, 255-inputImageRGBA[index].z, 255);
 
   outputImageRGBA[index] = output;
+}
+
+__global__
+void flipX(const uchar4* const inputImageRGBA,
+           uchar4* const outputImageRGBA,
+           int numCols, int numRows) {
+  const int2 matrix = make_int2( blockIdx.x * blockDim.x + threadIdx.x,
+                             blockIdx.y * blockDim.y + threadIdx.y);
+  const int index = matrix.y * numCols + matrix.x;
+
+  const int outputIndex = (numRows * numCols - 1) - index;
+
+  outputImageRGBA[outputIndex] = inputImageRGBA[index];
 }
 
 
@@ -207,7 +219,9 @@ void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, uchar4 * const d_
   const dim3 gridSize(numCols/blockSize.x + 1, numRows/blockSize.y + 1);
 
 
-  negateImage<<<gridSize, blockSize>>>(d_inputImageRGBA, d_outputImageRGBA, numCols);
+  //negateImage<<<gridSize, blockSize>>>(d_inputImageRGBA, d_outputImageRGBA, numCols);
+  flipX<<<gridSize, blockSize>>>(d_inputImageRGBA, d_outputImageRGBA, numCols, numRows);
+
   // //Launch a kernel for separating the RGBA image into different color channels
   // separateChannels<<<gridSize, blockSize>>>(d_inputImageRGBA,
   //                                           numRows,
