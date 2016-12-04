@@ -2,7 +2,12 @@
     Parallel Programming Final Project
     Created By: Brian Adams, Philip Petrosino, Cody Wisniewski
 
-    Certain parts of this were re-used from Udacity CS344 Problem Set 2, such as ImageProcessor (HW2.cpp in PS 2)
+    Certain parts of this were re-used from Udacity CS344 Problem Set 2, such as ImageProcessor (HW2.cpp in PS 2).
+    Files used/re-used:
+      ImageProcessor.cpp (Previous HW2.cpp)
+      timer.h
+      utils.h
+      Makefile
 */
 
 
@@ -15,10 +20,8 @@
 #include "ImageProcessor.cpp"
 
 
-/*******  DEFINED IN student_func.cu *********/
-
-void transform(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputImageRGBA, uchar4* const d_outputImageRGBA,
-                        const size_t numRows, const size_t numCols, std::string transformation);
+void transform(uchar4 * const d_inputImageRGBA, uchar4* const d_outputImageRGBA,
+               const size_t numRows, const size_t numCols, std::string transformation);
 
 
 /*******  Begin main *********/
@@ -56,9 +59,12 @@ int main(int argc, char **argv) {
 
   GpuTimer timer;
   timer.Start();
+
   //call the transformation code
-  transform(h_inputImageRGBA, d_inputImageRGBA, d_outputImageRGBA, numRows(), numCols(), transformation);
+  transform(d_inputImageRGBA, d_outputImageRGBA, numRows(), numCols(), transformation);
+
   timer.Stop();
+
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
   int err = printf("Your code ran in: %f msecs.\n", timer.Elapsed());
 
@@ -67,8 +73,6 @@ int main(int argc, char **argv) {
     std::cerr << "Couldn't print timing information! STDOUT Closed!" << std::endl;
     exit(1);
   }
-
-  //check results and output the blurred image
 
   size_t numPixels = numRows()*numCols();
   //copy the output back to the host
