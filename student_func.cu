@@ -109,29 +109,22 @@ void gaussian_blur(const unsigned char* const inputChannel,
                    const float* const filter, const int filterWidth)
 {
 
-  const int2 matrix = make_int2( blockIdx.x * blockDim.x + threadIdx.x,
-                               blockIdx.y * blockDim.y + threadIdx.y);
-  const int index = matrix.y * numCols + matrix.x;
+  // int yIdx = threadIdx.y + blockIdx.y * blockDim.y;
+  // int xIdx = threadIdx.x + blockIdx.x * blockDim.x;
+
+  // // convert the 2D array to a 1D array
+  // if (xIdx < numRows && yIdx < numCols) {
+  //   int index = numRows*yIdx + xIdx;
+
+  //   // image is in uchar4 so that's the pixel we need to get
+  //   uchar4 color = rgbaImage[index];
+
+  //   // use the formula given above to do the grayscale
+  //   unsigned char newPixelValue = (unsigned char)(0.299f * color.x + 0.587f * color.y + 0.114f * color.z);
+  //   greyImage[index] = newPixelValue;
+  // }
   
-  if(matrix.x >= numCols || matrix.y >= numRows)
-       return;
-  
-  float color = 0.0f;
-  
-  for(int y = 0; y < filterWidth; y++) {
-      for(int x = 0; x < filterWidth; x++) {
- 
-          int colX = matrix.x + x - filterWidth/2;
-          int colY = matrix.y + y - filterWidth/2;
-          colX = min(max(colX, 0), numCols - 1);
-          colY = min(max(colY, 0), numRows - 1);
-          float filter_value = filter[y * filterWidth + x];
-          color += filter_value * static_cast<float>(inputChannel[colY * numCols + colX]);
-          
-      }
-  }
-  
-  outputChannel[index] = color;
+  // outputChannel[index] = color;
   
   // NOTE: If a thread's absolute position 2D position is within the image, but some of
   // its neighbors are outside the image, then you will need to be extra careful. Instead
@@ -183,9 +176,9 @@ void recombineChannels(const unsigned char* const redChannel,
   if (thread_2D_pos.x >= numCols || thread_2D_pos.y >= numRows)
     return;
 
-  unsigned char red   = redChannel[thread_1D_pos];
-  unsigned char green = greenChannel[thread_1D_pos];
-  unsigned char blue  = blueChannel[thread_1D_pos];
+  unsigned char red   = 255-redChannel[thread_1D_pos];
+  unsigned char green = 255-greenChannel[thread_1D_pos];
+  unsigned char blue  = 255-blueChannel[thread_1D_pos];
 
   //Alpha should be 255 for no transparency
   uchar4 outputPixel = make_uchar4(red, green, blue, 255);
@@ -243,31 +236,31 @@ void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, uchar4 * const d_
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
   //Call your convolution kernel here 3 times, once for each color channel.
-  gaussian_blur<<<gridSize, blockSize>>>(
-      d_red,
-      d_redBlurred,
-      numRows,
-      numCols,
-      d_filter,
-      filterWidth);
-  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+  // gaussian_blur<<<gridSize, blockSize>>>(
+  //     d_red,
+  //     d_redBlurred,
+  //     numRows,
+  //     numCols,
+  //     d_filter,
+  //     filterWidth);
+  // cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
     
-  gaussian_blur<<<gridSize, blockSize>>>(
-      d_blue,
-      d_blueBlurred,
-      numRows,
-      numCols,
-      d_filter,
-      filterWidth);
-  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+  // gaussian_blur<<<gridSize, blockSize>>>(
+  //     d_blue,
+  //     d_blueBlurred,
+  //     numRows,
+  //     numCols,
+  //     d_filter,
+  //     filterWidth);
+  // cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
     
-  gaussian_blur<<<gridSize, blockSize>>>(
-      d_green,
-      d_greenBlurred,
-      numRows,
-      numCols,
-      d_filter,
-      filterWidth);
+  // gaussian_blur<<<gridSize, blockSize>>>(
+  //     d_green,
+  //     d_greenBlurred,
+  //     numRows,
+  //     numCols,
+  //     d_filter,
+  //     filterWidth);
 
   // Again, call cudaDeviceSynchronize(), then call checkCudaErrors() immediately after
   // launching your kernel to make sure that you didn't make any mistakes.
@@ -277,9 +270,9 @@ void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, uchar4 * const d_
   //
   // NOTE: This kernel launch depends on the gridSize and blockSize variables,
   // which you must set yourself.
-  recombineChannels<<<gridSize, blockSize>>>(d_redBlurred,
-                                             d_greenBlurred,
-                                             d_blueBlurred,
+  recombineChannels<<<gridSize, blockSize>>>(d_red,
+                                             d_green,
+                                             d_blue,
                                              d_outputImageRGBA,
                                              numRows,
                                              numCols);
