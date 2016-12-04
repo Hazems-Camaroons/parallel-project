@@ -24,10 +24,6 @@ size_t numCols() { return imageInputRGBA.cols; }
 //on both the host and device
 void preProcess(uchar4 **h_inputImageRGBA, uchar4 **h_outputImageRGBA,
                 uchar4 **d_inputImageRGBA, uchar4 **d_outputImageRGBA,
-                unsigned char **d_redBlurred,
-                unsigned char **d_greenBlurred,
-                unsigned char **d_blueBlurred,
-                float **h_filter, int *filterWidth,
                 const std::string &filename) {
 
   //make sure the context initializes ok
@@ -65,42 +61,6 @@ void preProcess(uchar4 **h_inputImageRGBA, uchar4 **h_outputImageRGBA,
 
   d_inputImageRGBA__  = *d_inputImageRGBA;
   d_outputImageRGBA__ = *d_outputImageRGBA;
-
-  //now create the filter that they will use
-  const int blurKernelWidth = 9;
-  const float blurKernelSigma = 2.;
-
-  *filterWidth = blurKernelWidth;
-
-  //create and fill the filter we will convolve with
-  *h_filter = new float[blurKernelWidth * blurKernelWidth];
-  h_filter__ = *h_filter;
-
-  float filterSum = 0.f; //for normalization
-
-  for (int r = -blurKernelWidth/2; r <= blurKernelWidth/2; ++r) {
-    for (int c = -blurKernelWidth/2; c <= blurKernelWidth/2; ++c) {
-      float filterValue = expf( -(float)(c * c + r * r) / (2.f * blurKernelSigma * blurKernelSigma));
-      (*h_filter)[(r + blurKernelWidth/2) * blurKernelWidth + c + blurKernelWidth/2] = filterValue;
-      filterSum += filterValue;
-    }
-  }
-
-  float normalizationFactor = 1.f / filterSum;
-
-  for (int r = -blurKernelWidth/2; r <= blurKernelWidth/2; ++r) {
-    for (int c = -blurKernelWidth/2; c <= blurKernelWidth/2; ++c) {
-      (*h_filter)[(r + blurKernelWidth/2) * blurKernelWidth + c + blurKernelWidth/2] *= normalizationFactor;
-    }
-  }
-
-  //blurred
-  checkCudaErrors(cudaMalloc(d_redBlurred,    sizeof(unsigned char) * numPixels));
-  checkCudaErrors(cudaMalloc(d_greenBlurred,  sizeof(unsigned char) * numPixels));
-  checkCudaErrors(cudaMalloc(d_blueBlurred,   sizeof(unsigned char) * numPixels));
-  checkCudaErrors(cudaMemset(*d_redBlurred,   0, sizeof(unsigned char) * numPixels));
-  checkCudaErrors(cudaMemset(*d_greenBlurred, 0, sizeof(unsigned char) * numPixels));
-  checkCudaErrors(cudaMemset(*d_blueBlurred,  0, sizeof(unsigned char) * numPixels));
 }
 
 void postProcess(const std::string& output_file, uchar4* data_ptr) {
@@ -117,16 +77,4 @@ void cleanUp(void)
   cudaFree(d_inputImageRGBA__);
   cudaFree(d_outputImageRGBA__);
   delete[] h_filter__;
-}
-
-
-// An unused bit of code showing how to accomplish this assignment using OpenCV.  It is much faster 
-//    than the naive implementation in reference_calc.cpp.
-void generateReferenceImage(std::string input_file, std::string reference_file, int kernel_size)
-{
-	cv::Mat input = cv::imread(input_file);
-	// Create an identical image for the output as a placeholder
-	cv::Mat reference = cv::imread(input_file);
-	cv::GaussianBlur(input, reference, cv::Size2i(kernel_size, kernel_size),0);
-	cv::imwrite(reference_file, reference);
 }

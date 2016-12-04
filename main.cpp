@@ -1,4 +1,10 @@
-//Udacity HW2 Driver
+/*
+    Parallel Programming Final Project
+    Created By: Brian Adams, Philip Petrosino, Cody Wisniewski
+
+    Certain parts of this were re-used from Udacity CS344 Problem Set 2, such as ImageProcessor (HW2.cpp in PS 2)
+*/
+
 
 #include <iostream>
 #include "timer.h"
@@ -6,25 +12,13 @@
 #include <string>
 #include <stdio.h>
 
-#include "reference_calc.h"
-#include "compare.h"
-
-//include the definitions of the above functions for this homework
-#include "HW2.cpp"
+#include "ImageProcessor.cpp"
 
 
 /*******  DEFINED IN student_func.cu *********/
 
-void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputImageRGBA,
-                        uchar4* const d_outputImageRGBA,
-                        const size_t numRows, const size_t numCols,
-                        unsigned char *d_redBlurred,
-                        unsigned char *d_greenBlurred,
-                        unsigned char *d_blueBlurred,
-                        const int filterWidth);
-
-void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsImage,
-                                const float* const h_filter, const size_t filterWidth);
+void transform(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputImageRGBA, uchar4* const d_outputImageRGBA,
+                        const size_t numRows, const size_t numCols, std::string transformation);
 
 
 /*******  Begin main *********/
@@ -32,57 +26,38 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
 int main(int argc, char **argv) {
   uchar4 *h_inputImageRGBA,  *d_inputImageRGBA;
   uchar4 *h_outputImageRGBA, *d_outputImageRGBA;
-  unsigned char *d_redBlurred, *d_greenBlurred, *d_blueBlurred;
-
-  float *h_filter;
-  int    filterWidth;
 
   std::string input_file;
   std::string output_file;
-  std::string reference_file;
-  double perPixelError = 0.0;
-  double globalError   = 0.0;
-  bool useEpsCheck = false;
+  std::string transformation;
   switch (argc)
   {
 	case 2:
 	  input_file = std::string(argv[1]);
-	  output_file = "HW2_output.png";
-	  reference_file = "HW2_reference.png";
+	  output_file = "PP_output.png";
 	  break;
-	case 3:
-	  input_file  = std::string(argv[1]);
-      output_file = std::string(argv[2]);
-	  reference_file = "HW2_reference.png";
-	  break;
-	case 4:
-	  input_file  = std::string(argv[1]);
-      output_file = std::string(argv[2]);
-	  reference_file = std::string(argv[3]);
-	  break;
-	case 6:
-	  useEpsCheck=true;
-	  input_file  = std::string(argv[1]);
-	  output_file = std::string(argv[2]);
-	  reference_file = std::string(argv[3]);
-	  perPixelError = atof(argv[4]);
-      globalError   = atof(argv[5]);
-	  break;
+  case 3:
+    input_file = std::string(argv[1]);
+    output_file = "PP_output.png";
+    transformation = std::string(argv[2]);
+
+    if (transformation != "flipY" && transformation != "flipX" && transformation != "negate"){
+      std::cerr << "Must use one of the 3 transformations: flipX, flipY, negate" << std::endl;
+      exit(1);
+    }
+    break;
 	default:
-      std::cerr << "Usage: ./HW2 input_file [output_filename] [reference_filename] [perPixelError] [globalError]" << std::endl;
+      std::cerr << "Usage: ./pp input_file transformation " << std::endl;
       exit(1);
   }
-  //load the image and give us our input and output pointers
-  preProcess(&h_inputImageRGBA, &h_outputImageRGBA, &d_inputImageRGBA, &d_outputImageRGBA,
-             &d_redBlurred, &d_greenBlurred, &d_blueBlurred,
-             &h_filter, &filterWidth, input_file);
 
-  allocateMemoryAndCopyToGPU(numRows(), numCols(), h_filter, filterWidth);
+  //load the image and give us our input and output pointers
+  preProcess(&h_inputImageRGBA, &h_outputImageRGBA, &d_inputImageRGBA, &d_outputImageRGBA, input_file);
+
   GpuTimer timer;
   timer.Start();
-  //call the students' code
-  your_gaussian_blur(h_inputImageRGBA, d_inputImageRGBA, d_outputImageRGBA, numRows(), numCols(),
-                     d_redBlurred, d_greenBlurred, d_blueBlurred, filterWidth);
+  //call the transformation code
+  transform(h_inputImageRGBA, d_inputImageRGBA, d_outputImageRGBA, numRows(), numCols(), transformation);
   timer.Stop();
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
   int err = printf("Your code ran in: %f msecs.\n", timer.Elapsed());
@@ -100,23 +75,6 @@ int main(int argc, char **argv) {
   checkCudaErrors(cudaMemcpy(h_outputImageRGBA, d_outputImageRGBA__, sizeof(uchar4) * numPixels, cudaMemcpyDeviceToHost));
 
   postProcess(output_file, h_outputImageRGBA);
-
-  referenceCalculation(h_inputImageRGBA, h_outputImageRGBA,
-                       numRows(), numCols(),
-                       h_filter, filterWidth);
-
-  postProcess(reference_file, h_outputImageRGBA);
-
-    //  Cheater easy way with OpenCV
-    //generateReferenceImage(input_file, reference_file, filterWidth);
-
-  compareImages(reference_file, output_file, useEpsCheck, perPixelError, globalError);
-
-  checkCudaErrors(cudaFree(d_redBlurred));
-  checkCudaErrors(cudaFree(d_greenBlurred));
-  checkCudaErrors(cudaFree(d_blueBlurred));
-
-  cleanUp();
 
   return 0;
 }
