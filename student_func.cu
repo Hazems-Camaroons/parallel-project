@@ -1,92 +1,296 @@
-// Homework 1
-// Color to Greyscale Conversion
+// Homework 2
+// Image Blurring
+//
+// In this homework we are blurring an image. To do this, imagine that we have
+// a square array of weight values. For each pixel in the image, imagine that we
+// overlay this square array of weights on top of the image such that the center
+// of the weight array is aligned with the current pixel. To compute a blurred
+// pixel value, we multiply each pair of numbers that line up. In other words, we
+// multiply each weight with the pixel underneath it. Finally, we add up all of the
+// multiplied numbers and assign that value to our output for the current pixel.
+// We repeat this process for all the pixels in the image.
 
-//A common way to represent color images is known as RGBA - the color
-//is specified by how much Red, Grean and Blue is in it.
-//The 'A' stands for Alpha and is used for transparency, it will be
-//ignored in this homework.
+// To help get you started, we have included some useful notes here.
 
-//Each channel Red, Blue, Green and Alpha is represented by one byte.
-//Since we are using one byte for each color there are 256 different
-//possible values for each color.  This means we use 4 bytes per pixel.
+//****************************************************************************
 
-//Greyscale images are represented by a single intensity value per pixel
-//which is one byte in size.
+// For a color image that has multiple channels, we suggest separating
+// the different color channels so that each color is stored contiguously
+// instead of being interleaved. This will simplify your code.
 
-//To convert an image from color to grayscale one simple method is to
-//set the intensity to the average of the RGB channels.  But we will
-//use a more sophisticated method that takes into account how the eye 
-//perceives color and weights the channels unequally.
+// That is instead of RGBARGBARGBARGBA... we suggest transforming to three
+// arrays (as in the previous homework we ignore the alpha channel again):
+//  1) RRRRRRRR...
+//  2) GGGGGGGG...
+//  3) BBBBBBBB...
+//
+// The original layout is known an Array of Structures (AoS) whereas the
+// format we are converting to is known as a Structure of Arrays (SoA).
 
-//The eye responds most strongly to green followed by red and then blue.
-//The NTSC (National Television System Committee) recommends the following
-//formula for color to greyscale conversion:
+// As a warm-up, we will ask you to write the kernel that performs this
+// separation. You should then write the "meat" of the assignment,
+// which is the kernel that performs the actual blur. We provide code that
+// re-combines your blurred results for each color channel.
 
-//I = .299f * R + .587f * G + .114f * B
+//****************************************************************************
 
-//Notice the trailing f's on the numbers which indicate that they are 
-//single precision floating point constants and not double precision
-//constants.
+// You must fill in the gaussian_blur kernel to perform the blurring of the
+// inputChannel, using the array of weights, and put the result in the outputChannel.
 
-//You should fill in the kernel as well as set the block and grid sizes
-//so that the entire image is processed.
+// Here is an example of computing a blur, using a weighted average, for a single
+// pixel in a small image.
+//
+// Array of weights:
+//
+//  0.0  0.2  0.0
+//  0.2  0.2  0.2
+//  0.0  0.2  0.0
+//
+// Image (note that we align the array of weights to the center of the box):
+//
+//    1  2  5  2  0  3
+//       -------
+//    3 |2  5  1| 6  0       0.0*2 + 0.2*5 + 0.0*1 +
+//      |       |
+//    4 |3  6  2| 1  4   ->  0.2*3 + 0.2*6 + 0.2*2 +   ->  3.2
+//      |       |
+//    0 |4  0  3| 4  2       0.0*4 + 0.2*0 + 0.0*3
+//       -------
+//    9  6  5  0  3  9
+//
+//         (1)                         (2)                 (3)
+//
+// A good starting place is to map each thread to a pixel as you have before.
+// Then every thread can perform steps 2 and 3 in the diagram above
+// completely independently of one another.
+
+// Note that the array of weights is square, so its height is the same as its width.
+// We refer to the array of weights as a filter, and we refer to its width with the
+// variable filterWidth.
+
+//****************************************************************************
+
+// Your homework submission will be evaluated based on correctness and speed.
+// We test each pixel against a reference solution. If any pixel differs by
+// more than some small threshold value, the system will tell you that your
+// solution is incorrect, and it will let you try again.
+
+// Once you have gotten that working correctly, then you can think about using
+// shared memory and having the threads cooperate to achieve better performance.
+
+//****************************************************************************
+
+// Also note that we've supplied a helpful debugging function called checkCudaErrors.
+// You should wrap your allocation and copying statements like we've done in the
+// code we're supplying you. Here is an example of the unsafe way to allocate
+// memory on the GPU:
+//
+// cudaMalloc(&d_red, sizeof(unsigned char) * numRows * numCols);
+//
+// Here is an example of the safe way to do the same thing:
+//
+// checkCudaErrors(cudaMalloc(&d_red, sizeof(unsigned char) * numRows * numCols));
+//
+// Writing code the safe way requires slightly more typing, but is very helpful for
+// catching mistakes. If you write code the unsafe way and you make a mistake, then
+// any subsequent kernels won't compute anything, and it will be hard to figure out
+// why. Writing code the safe way will inform you as soon as you make a mistake.
+
+// Finally, remember to free the memory you allocate at the end of the function.
+
+//****************************************************************************
 
 #include "utils.h"
 
 __global__
-void rgba_to_greyscale(const uchar4* const rgbaImage,
-                       unsigned char* const greyImage,
-                       int numRows, int numCols)
+void gaussian_blur(const unsigned char* const inputChannel,
+                   unsigned char* const outputChannel,
+                   int numRows, int numCols,
+                   const float* const filter, const int filterWidth)
 {
-  //TODO
-  //Fill in the kernel to convert from color to greyscale
-  //the mapping from components of a uchar4 to RGBA is:
-  // .x -> R ; .y -> G ; .z -> B ; .w -> A
-  //
-  //The output (greyImage) at each pixel should be the result of
-  //applying the formula: output = .299f * R + .587f * G + .114f * B;
-  //Note: We will be ignoring the alpha channel for this conversion
 
-  //First create a mapping from the 2D block and grid locations
-  //to an absolute 2D location in the image, then use that to
-  //calculate a 1D offset
-
-  // get the x and y coordinates of the image
-  int yIdx = threadIdx.y + blockIdx.y * blockDim.y;
-  int xIdx = threadIdx.x + blockIdx.x * blockDim.x;
-
-  // convert the 2D array to a 1D array
-  if (xIdx < numRows && yIdx < numCols) {
-    int index = numRows*yIdx + xIdx;
-
-    // image is in uchar4 so that's the pixel we need to get
-    uchar4 color = rgbaImage[index];
-
-    // use the formula given above to do the grayscale
-    unsigned char newPixelValue = (unsigned char)(0.299f * color.x + 0.587f * color.y + 0.114f * color.z);
-    greyImage[index] = newPixelValue;
+  const int2 matrix = make_int2( blockIdx.x * blockDim.x + threadIdx.x,
+                               blockIdx.y * blockDim.y + threadIdx.y);
+  const int index = matrix.y * numCols + matrix.x;
+  
+  if(matrix.x >= numCols || matrix.y >= numRows)
+       return;
+  
+  float color = 0.0f;
+  
+  for(int y = 0; y < filterWidth; y++) {
+      for(int x = 0; x < filterWidth; x++) {
+ 
+          int colX = matrix.x + x - filterWidth/2;
+          int colY = matrix.y + y - filterWidth/2;
+          colX = min(max(colX, 0), numCols - 1);
+          colY = min(max(colY, 0), numRows - 1);
+          float filter_value = filter[y * filterWidth + x];
+          color += filter_value * static_cast<float>(inputChannel[colY * numCols + colX]);
+          
+      }
   }
+  
+  outputChannel[index] = color;
+  
+  // NOTE: If a thread's absolute position 2D position is within the image, but some of
+  // its neighbors are outside the image, then you will need to be extra careful. Instead
+  // of trying to read such a neighbor value from GPU memory (which won't work because
+  // the value is out of bounds), you should explicitly clamp the neighbor values you read
+  // to be within the bounds of the image. If this is not clear to you, then please refer
+  // to sequential reference solution for the exact clamping semantics you should follow.
 }
 
-void your_rgba_to_greyscale(const uchar4 * const h_rgbaImage, uchar4 * const d_rgbaImage,
-                            unsigned char* const d_greyImage, size_t numRows, size_t numCols)
+//This kernel takes in an image represented as a uchar4 and splits
+//it into three images consisting of only one color channel each
+__global__
+void separateChannels(const uchar4* const inputImageRGBA,
+                      int numRows,
+                      int numCols,
+                      unsigned char* const redChannel,
+                      unsigned char* const greenChannel,
+                      unsigned char* const blueChannel)
 {
-  //You must fill in the correct sizes for the blockSize and gridSize
-  //currently only one block with one thread is being launched
+  const int2 matrix = make_int2( blockIdx.x * blockDim.x + threadIdx.x,
+                             blockIdx.y * blockDim.y + threadIdx.y);
+  const int index = matrix.y * numCols + matrix.x;
+    
+  if(matrix.x >= numCols || matrix.y >= numRows)
+      return;
+  redChannel[index]   = inputImageRGBA[index].x;
+  greenChannel[index] = inputImageRGBA[index].y;
+  blueChannel[index]  = inputImageRGBA[index].z;
+}
 
-  // assuming we need to tile these blocks, we choose some thread count
-  int threadCount = 16;
+//This kernel takes in three color channels and recombines them
+//into one image.  The alpha channel is set to 255 to represent
+//that this image has no transparency.
+__global__
+void recombineChannels(const unsigned char* const redChannel,
+                       const unsigned char* const greenChannel,
+                       const unsigned char* const blueChannel,
+                       uchar4* const outputImageRGBA,
+                       int numRows,
+                       int numCols)
+{
+  const int2 thread_2D_pos = make_int2( blockIdx.x * blockDim.x + threadIdx.x,
+                                        blockIdx.y * blockDim.y + threadIdx.y);
 
-  const dim3 blockSize(threadCount, threadCount, 1);  
+  const int thread_1D_pos = thread_2D_pos.y * numCols + thread_2D_pos.x;
 
-  // now we need to find the number of blocks by figuring out how many threads can run to process the image
-  int blockX = numRows / threadCount + 1;
-  int blockY = numCols / threadCount + 1;
+  //make sure we don't try and access memory outside the image
+  //by having any threads mapped there return early
+  if (thread_2D_pos.x >= numCols || thread_2D_pos.y >= numRows)
+    return;
 
-  const dim3 gridSize( blockX, blockY, 1); 
+  unsigned char red   = redChannel[thread_1D_pos];
+  unsigned char green = greenChannel[thread_1D_pos];
+  unsigned char blue  = blueChannel[thread_1D_pos];
 
-  rgba_to_greyscale<<<gridSize, blockSize>>>(d_rgbaImage, d_greyImage, numRows, numCols);
-  
+  //Alpha should be 255 for no transparency
+  uchar4 outputPixel = make_uchar4(red, green, blue, 255);
+
+  outputImageRGBA[thread_1D_pos] = outputPixel;
+}
+
+unsigned char *d_red, *d_green, *d_blue;
+float         *d_filter;
+
+void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsImage,
+                                const float* const h_filter, const size_t filterWidth)
+{
+
+  //allocate memory for the three different channels
+  //original
+  checkCudaErrors(cudaMalloc(&d_red,   sizeof(unsigned char) * numRowsImage * numColsImage));
+  checkCudaErrors(cudaMalloc(&d_green, sizeof(unsigned char) * numRowsImage * numColsImage));
+  checkCudaErrors(cudaMalloc(&d_blue,  sizeof(unsigned char) * numRowsImage * numColsImage));
+
+
+  //IMPORTANT: Notice that we pass a pointer to a pointer to cudaMalloc
+  checkCudaErrors(cudaMalloc(&d_filter, sizeof( float) * filterWidth * filterWidth));
+
+
+  checkCudaErrors(cudaMemcpy(d_filter, h_filter, sizeof(float) * filterWidth * filterWidth, cudaMemcpyHostToDevice));
+
+}
+
+void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, uchar4 * const d_inputImageRGBA,
+                        uchar4* const d_outputImageRGBA, const size_t numRows, const size_t numCols,
+                        unsigned char *d_redBlurred, 
+                        unsigned char *d_greenBlurred, 
+                        unsigned char *d_blueBlurred,
+                        const int filterWidth)
+{
+  //Set reasonable block size (i.e., number of threads per block)
+  const dim3 blockSize(32, 32);
+
+
+  //Compute correct grid size (i.e., number of blocks per kernel launch)
+  //from the image size and and block size.
+  const dim3 gridSize(numCols/blockSize.x + 1, numRows/blockSize.y + 1);
+
+  //Launch a kernel for separating the RGBA image into different color channels
+  separateChannels<<<gridSize, blockSize>>>(d_inputImageRGBA,
+                                            numRows,
+                                            numCols,
+                                            d_red,
+                                            d_green,
+                                            d_blue);
+
+  // Call cudaDeviceSynchronize(), then call checkCudaErrors() immediately after
+  // launching your kernel to make sure that you didn't make any mistakes.
   cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
+  //Call your convolution kernel here 3 times, once for each color channel.
+  gaussian_blur<<<gridSize, blockSize>>>(
+      d_red,
+      d_redBlurred,
+      numRows,
+      numCols,
+      d_filter,
+      filterWidth);
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+    
+  gaussian_blur<<<gridSize, blockSize>>>(
+      d_blue,
+      d_blueBlurred,
+      numRows,
+      numCols,
+      d_filter,
+      filterWidth);
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+    
+  gaussian_blur<<<gridSize, blockSize>>>(
+      d_green,
+      d_greenBlurred,
+      numRows,
+      numCols,
+      d_filter,
+      filterWidth);
+
+  // Again, call cudaDeviceSynchronize(), then call checkCudaErrors() immediately after
+  // launching your kernel to make sure that you didn't make any mistakes.
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+
+  // Now we recombine your results. We take care of launching this kernel for you.
+  //
+  // NOTE: This kernel launch depends on the gridSize and blockSize variables,
+  // which you must set yourself.
+  recombineChannels<<<gridSize, blockSize>>>(d_redBlurred,
+                                             d_greenBlurred,
+                                             d_blueBlurred,
+                                             d_outputImageRGBA,
+                                             numRows,
+                                             numCols);
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+
+}
+
+
+//Free all the memory that we allocated
+void cleanup() {
+  checkCudaErrors(cudaFree(d_red));
+  checkCudaErrors(cudaFree(d_green));
+  checkCudaErrors(cudaFree(d_blue));
 }
